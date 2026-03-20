@@ -11,12 +11,21 @@ import hashlib
 import tempfile
 import zipfile
 import tarfile
+import atexit
 from pathlib import Path
 from typing import Dict, List, Set
 import yaml
 import requests
+from posthog import Posthog
 from dataclasses import dataclass
 from collections import defaultdict
+
+# PostHog analytics and error tracking
+posthog = Posthog(
+    'phc_aur20epnEcOsmKpTpdbPMjJSzM5ypEtSD4zLwm0Q0aD',
+    host='https://g.theoutdoorprogrammer.com',
+)
+atexit.register(posthog.flush)
 
 
 @dataclass
@@ -308,6 +317,10 @@ Examples:
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BinHub - Universal Binary Distribution</title>
+    <script>
+      !function(t,e){{var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){{function g(t,e){{var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){{t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){{var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e}},u.people.toString=function(){{return u.toString(1)+".people (stub)"}},o="init capture register register_once register_for_session unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey identify setPersonProperties".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])}},e.__SV=1)}}(document,window.posthog||[]);
+      posthog.init('phc_aur20epnEcOsmKpTpdbPMjJSzM5ypEtSD4zLwm0Q0aD', {{api_host: 'https://g.theoutdoorprogrammer.com'}});
+    </script>
     <style>
         body {{
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -472,6 +485,10 @@ Examples:
                 processed_binaries.append(binary_info)
             except Exception as e:
                 print(f"Error processing {yaml_file}: {e}")
+                posthog.capture(distinct_id='binhub-processor', event='processing_error', properties={
+                    'error': str(e),
+                    'yaml_file': str(yaml_file),
+                })
                 continue
         
         print(f"Successfully processed {len(processed_binaries)} binaries")
@@ -487,4 +504,12 @@ Examples:
 
 if __name__ == "__main__":
     processor = BinaryProcessor()
-    processor.process_all()
+    try:
+        posthog.capture(distinct_id='binhub-processor', event='processing_started')
+        results = processor.process_all()
+        posthog.capture(distinct_id='binhub-processor', event='processing_completed', properties={
+            'binaries_count': len(results) if results else 0,
+        })
+    except Exception as e:
+        posthog.capture_exception(e, distinct_id='binhub-processor')
+        raise
